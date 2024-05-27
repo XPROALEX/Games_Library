@@ -131,17 +131,20 @@ public class AuthController {
 		return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
 	}
 
+	@SuppressWarnings("finally")
 	@PostMapping("/logout")
 	public ResponseEntity<?> logoutUser() {
-
-		UserDetailsImpl user = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-
-		tokenService.deleteByUserId(user.getId());
-
-		ResponseCookie cookie = jwtUtils.getCleanJwtCookie();
-
-		return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, cookie.toString())
-				.body(new MessageResponse("You've been signed out!"));
+		try {
+			UserDetailsImpl user = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication()
+					.getPrincipal();
+			tokenService.deleteByUserId(user.getId());
+		} catch (Exception e) {
+			e.getMessage();
+		} finally {
+			ResponseCookie cookie = jwtUtils.getCleanJwtCookie();
+			return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, cookie.toString())
+					.body(new MessageResponse("You've been signed out!"));
+		}
 	}
 
 	@PostMapping("/refreshtoken")
