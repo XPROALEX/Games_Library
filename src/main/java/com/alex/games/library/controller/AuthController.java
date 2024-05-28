@@ -2,10 +2,8 @@ package com.alex.games.library.controller;
 
 import java.time.Instant;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -27,13 +25,13 @@ import com.alex.games.library.model.Token;
 import com.alex.games.library.model.User;
 import com.alex.games.library.payload.request.LoginRequest;
 import com.alex.games.library.payload.request.SignupRequest;
-import com.alex.games.library.payload.response.MessageResponse;
+import com.alex.games.library.payload.response.AuthResponse;
 import com.alex.games.library.payload.response.UserInfoResponse;
-import com.alex.games.library.repository.RoleRepository;
-import com.alex.games.library.repository.UserRepository;
 import com.alex.games.library.security.jwt.JwtUtils;
 import com.alex.games.library.security.service.UserDetailsImpl;
+import com.alex.games.library.service.RoleService;
 import com.alex.games.library.service.TokenService;
+import com.alex.games.library.service.UserService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -46,13 +44,13 @@ public class AuthController {
 	AuthenticationManager authenticationManager;
 
 	@Autowired
-	UserRepository userRepository;
-
-	@Autowired
-	RoleRepository roleRepository;
-
-	@Autowired
 	PasswordEncoder encoder;
+
+	@Autowired
+	UserService userService;
+
+	@Autowired
+	RoleService roleService;
 
 	@Autowired
 	JwtUtils jwtUtils;
@@ -62,32 +60,37 @@ public class AuthController {
 
 	@PostMapping("/login")
 	public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
-		Authentication authentication = authenticationManager.authenticate(
-				new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
+		try {
+			Authentication authentication = authenticationManager.authenticate(
+					new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
-		SecurityContextHolder.getContext().setAuthentication(authentication);
+			SecurityContextHolder.getContext().setAuthentication(authentication);
 
-		UserDetailsImpl userDetailsImpl = (UserDetailsImpl) authentication.getPrincipal();
+			UserDetailsImpl userDetailsImpl = (UserDetailsImpl) authentication.getPrincipal();
 
-		ResponseCookie jwtCookie = jwtUtils.generateJwtCookie(userDetailsImpl);
+			ResponseCookie jwtCookie = jwtUtils.generateJwtCookie(userDetailsImpl);
 
-		tokenService.createTokenEntity(userDetailsImpl, jwtCookie);
+			tokenService.createTokenEntity(userDetailsImpl, jwtCookie);
 
-		List<String> roles = userDetailsImpl.getAuthorities().stream().map(role -> role.getAuthority())
-				.collect(Collectors.toList());
+			User user = userService.findByUsername(userDetailsImpl.getUsername()).get();
 
-		return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, jwtCookie.toString()).body(new UserInfoResponse(
-				userDetailsImpl.getId(), userDetailsImpl.getUsername(), userDetailsImpl.getEmail(), roles));
+			UserInfoResponse userInfoResponse = userService.fromUserToUserInfoResponse(user);
+
+			return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
+					.body(new AuthResponse("Welcome ", true, userInfoResponse));
+		} catch (Exception e) {
+			return ResponseEntity.ok(new AuthResponse("User or password not correct", false, null));
+		}
 	}
 
 	@PostMapping("/register")
 	public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signupRequest) {
-		if (userRepository.existsByUsername(signupRequest.getUsername())) {
-			return ResponseEntity.badRequest().body(new MessageResponse("Error: Username is already taken!"));
+		if (userService.existsByUsername(signupRequest.getUsername())) {
+			return ResponseEntity.ok(new AuthResponse("Error: Username is already taken!", false, null));
 		}
 
-		if (userRepository.existsByEmail(signupRequest.getEmail())) {
-			return ResponseEntity.badRequest().body(new MessageResponse("Error: Email is already in use!"));
+		if (userService.existsByEmail(signupRequest.getEmail())) {
+			return ResponseEntity.ok(new AuthResponse("Error: Email is already in use!", false, null));
 		}
 
 		User user = new User();
@@ -96,29 +99,30 @@ public class AuthController {
 		user.setPassword(encoder.encode(signupRequest.getPassword()));
 
 		Set<String> strRoles = signupRequest.getRole();
-		Set<Role> roles = new HashSet();
+
+		Set<Role> roles = new HashSet<Role>();
 
 		if (strRoles == null || strRoles.isEmpty()) {
-			Role userRole = roleRepository.findByName(ERole.ROLE_USER)
+			Role userRole = roleService.getByName(ERole.ROLE_USER)
 					.orElseThrow(() -> new RuntimeException("Error: Role is not found."));
 			roles.add(userRole);
 		} else {
 			strRoles.forEach(role -> {
 				switch (role) {
 				case "admin":
-					Role adminRole = roleRepository.findByName(ERole.ROLE_ADMIN)
+					Role adminRole = roleService.getByName(ERole.ROLE_ADMIN)
 							.orElseThrow(() -> new RuntimeException("Error: Role is not found."));
 					roles.add(adminRole);
 
 					break;
 				case "mod":
-					Role moderatorRole = roleRepository.findByName(ERole.ROLE_MODERATOR)
+					Role moderatorRole = roleService.getByName(ERole.ROLE_MODERATOR)
 							.orElseThrow(() -> new RuntimeException("Error: Role is not found."));
 					roles.add(moderatorRole);
 
 					break;
 				default:
-					Role userRole = roleRepository.findByName(ERole.ROLE_USER)
+					Role userRole = roleService.getByName(ERole.ROLE_USER)
 							.orElseThrow(() -> new RuntimeException("Error: Role is not found."));
 					roles.add(userRole);
 				}
@@ -126,9 +130,11 @@ public class AuthController {
 		}
 
 		user.setRoles(roles);
-		userRepository.save(user);
+		userService.save(user);
 
-		return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
+		UserInfoResponse userInfoResponse = userService.fromUserToUserInfoResponse(user);
+
+		return ResponseEntity.ok(new AuthResponse("User registered successfully! ", true, userInfoResponse));
 	}
 
 	@SuppressWarnings("finally")
@@ -143,25 +149,32 @@ public class AuthController {
 		} finally {
 			ResponseCookie cookie = jwtUtils.getCleanJwtCookie();
 			return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, cookie.toString())
-					.body(new MessageResponse("You've been signed out!"));
+
+					.body(new AuthResponse("You've been signed out!", true, null));
 		}
 	}
 
 	@PostMapping("/refreshtoken")
 	public ResponseEntity<?> refreshtoken(HttpServletRequest request) {
-		Optional<Token> token = tokenService.findByToken(jwtUtils.getJwtFromCookies(request));
+		Optional<Token> token = tokenService.getByToken(jwtUtils.getJwtFromCookies(request));
 
 		if (token.isPresent()) {
 			if (token.get().getExpiryDate().compareTo(Instant.now()) < 0) {
-				ResponseCookie jwtCookie = jwtUtils.generateJwtCookie(token.get().getUser());
+
+				User user = token.get().getUser();
+
+				ResponseCookie jwtCookie = jwtUtils.generateJwtCookie(user);
 
 				tokenService.refreshToken(token.get(), jwtCookie);
 
+				UserInfoResponse userInfoResponse = userService.fromUserToUserInfoResponse(user);
+
 				return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
-						.body(new MessageResponse("Token is refreshed successfully!"));
+						.body(new AuthResponse("Token is refreshed successfully!", true, userInfoResponse));
 			} else
 				return ResponseEntity.ok().body("token is not expired");
+			// debug possibile rimozione di testo
 		} else
-			return ResponseEntity.badRequest().body(new MessageResponse("Token is not in database or is empty!"));
+			return ResponseEntity.ok(new AuthResponse("Token is not in database or is empty!", false, null));
 	}
 }

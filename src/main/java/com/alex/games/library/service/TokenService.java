@@ -31,7 +31,7 @@ public class TokenService {
 	@Autowired
 	JwtUtils jwtUtils;
 
-	public Optional<Token> findByToken(String token) {
+	public Optional<Token> getByToken(String token) {
 		return tokenRepository.findByToken(token);
 	}
 
