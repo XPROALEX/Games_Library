@@ -1,20 +1,26 @@
 package com.alex.games.library.service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.alex.games.library.model.Game;
 import com.alex.games.library.model.Genre;
 import com.alex.games.library.payload.request.GameRequest;
 import com.alex.games.library.repository.GameRepository;
 
+import jakarta.validation.Valid;
+
 @Service
+@Transactional
 public class GameService {
 
 	@Autowired
@@ -26,8 +32,8 @@ public class GameService {
 		return gameRepository.findById(id);
 	}
 
-	public Optional<Game> getByName(String name) {
-		return gameRepository.findByName(name);
+	public List<Game> getByNameContaining(String name) {
+		return gameRepository.findByNameContaining(name);
 	}
 
 	public List<Game> getAll() {
@@ -37,7 +43,9 @@ public class GameService {
 	public List<Game> getByGenres(List<Integer> genreId) {
 		List<Genre> genres = new ArrayList<Genre>();
 		genreId.forEach(id -> genres.add(genreService.getById(id).get()));
-		return gameRepository.findByGenresIn(genres);
+		Set<Game> gamesSet = gameRepository.findByGenresIn(genres);
+
+		return gamesSet.stream().sorted(Comparator.comparing(Game::getName)).collect(Collectors.toList());
 	}
 
 	public Game addGame(GameRequest gameRequest) {
@@ -66,6 +74,10 @@ public class GameService {
 
 		gameRepository.save(existinGame);
 		return existinGame;
+	}
+
+	public Optional<Game> getByName(@Valid String name) {
+		return gameRepository.findByName(name);
 	}
 
 }

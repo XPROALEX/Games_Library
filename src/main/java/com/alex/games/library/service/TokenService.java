@@ -17,6 +17,7 @@ import com.alex.games.library.security.service.UserDetailsImpl;
 import jakarta.transaction.Transactional;
 
 @Service
+@Transactional
 public class TokenService {
 
 	@Value("${gamelibrary.app.jwtExpirationMs}")
