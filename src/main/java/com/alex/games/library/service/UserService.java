@@ -70,18 +70,16 @@ public class UserService {
 	}
 
 	public UserInfoResponse fromUserToUserInfoResponse(User user) {
-		return new UserInfoResponse(user.getId(), user.getUsername(), user.getEmail(),
-				roleService.fromSetToStringList(user.getRoles()),
-				user.getGames().stream().collect(Collectors.toList()));
+		return new UserInfoResponse(user.getId(),
+									user.getUsername(),
+									user.getEmail(),
+									roleService.fromSetToStringList(user.getRoles()),
+									user.getGames().stream().collect(Collectors.toList()));
 	}
 
-	public List<Game> getGameByUserId(Long id) {
-		Optional<User> user = userRepository.findById(id);
-		if (user.isPresent()) {
-			Set<Game> games = user.get().getGames();
+	public List<Game> getGamesByUser(User user) {
+			Set<Game> games = user.getGames();
 			return games.stream().collect(Collectors.toList());
-		} else
-			throw new NoSuchElementException("User with id " + id + " not found");
 	}
 
 	public void addGameToLibraryById(Long userId, Long gameId) {
