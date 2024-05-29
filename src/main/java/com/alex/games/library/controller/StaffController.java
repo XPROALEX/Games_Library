@@ -34,7 +34,7 @@ public class StaffController {
 			Game game = gameService.addGame(gameRequest);
 			return ResponseEntity.ok(game);
 		} catch (Exception e) {
-			return ResponseEntity.badRequest().build();
+			return ResponseEntity.badRequest().body(gameRequest.getName() + " already exists!");
 		}
 	}
 
@@ -45,10 +45,8 @@ public class StaffController {
 			Genre genre = genreService.addGenre(name);
 			return ResponseEntity.ok(genre);
 		} catch (Exception e) {
-			return ResponseEntity.badRequest().build();
+			return ResponseEntity.badRequest().body(name + " alredy exists!");
 		}
 	}
-	
-	
 
 }

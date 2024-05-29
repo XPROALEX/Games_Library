@@ -3,13 +3,14 @@ package com.alex.games.library.payload.request;
 import java.util.List;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 
 public class GameRequest {
 
 	@NotBlank
 	private String name;
 
-	@NotBlank
+	@NotEmpty
 	private List<Integer> genreId;
 
 	@NotBlank
